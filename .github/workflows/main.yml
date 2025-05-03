@@ -1,0 +1,194 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main  # or master, depending on your default branch name
+  workflow_dispatch:  # Allows manual triggering from the GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          lfs: true  # Enable Git LFS support
+          fetch-depth: 0  # Fetch all history for proper versioning
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Git LFS
+        run: |
+          sudo apt-get install -y git-lfs
+          git lfs install
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install huggingface_hub
+          pip install -r requirements.txt
+
+      - name: Configure Hugging Face CLI
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo "Configuring Hugging Face credentials..."
+          # The token will be used later via environment variables
+
+      - name: Prepare repository structure for Hugging Face
+        run: |
+          # Create a directory for the HF Space
+          mkdir -p hf_space
+          
+          # Copy main code files
+          cp feature_extraction.py hf_space/
+          cp features_computation.py hf_space/
+          cp infer.py hf_space/
+          cp merge_batches.py hf_space/
+          
+          # Copy model directory (with LFS files)
+          mkdir -p hf_space/models
+          cp -r models/* hf_space/models/
+          
+          # Copy requirements file and create HF-specific files
+          cp requirements.txt hf_space/
+          
+          # Add gradio to requirements
+          echo "gradio>=3.50.0" >> hf_space/requirements.txt
+          
+          # Create app.py for the Gradio interface
+          cat > hf_space/app.py << 'EOL'
+import gradio as gr
+import os
+import tempfile
+import pandas as pd
+import numpy as np
+import pickle
+from feature_extraction import process_file
+import librosa
+
+# Load the model
+model_path = "models/combined_model.pkl"
+with open(model_path, 'rb') as f:
+    model = pickle.load(f)
+
+# Class labels
+class_labels = {
+    0: "Male twenties",
+    1: "Female twenties",
+    2: "Male fifties",
+    3: "Female fifties"
+}
+
+def predict(audio_file):
+    """Process the uploaded audio file and make a prediction"""
+    try:
+        # Process the audio file
+        features = process_file(audio_file)
+        
+        # Convert to DataFrame for prediction
+        features_df = pd.DataFrame([features])
+        
+        # Make sure non-feature columns are excluded
+        non_feature_cols = ['filename', 'path', 'file_name']
+        feature_cols = [col for col in features_df.columns if col not in non_feature_cols]
+        
+        # Get prediction
+        X = features_df[feature_cols]
+        predicted_idx = model.predict(X)[0]
+        predicted_label = class_labels[predicted_idx]
+        
+        return predicted_label
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Create Gradio interface
+description = """
+# Audio Gender and Age Classifier
+
+This model classifies audio recordings into four categories based on the speaker's gender and age:
+- Male in their twenties
+- Female in their twenties
+- Male in their fifties
+- Female in their fifties
+
+Upload an MP3 audio file to get a prediction.
+"""
+
+demo = gr.Interface(
+    fn=predict,
+    inputs=gr.Audio(type="filepath", label="Upload Audio File (MP3)"),
+    outputs=gr.Text(label="Predicted Speaker Category"),
+    title="Audio Gender and Age Classifier",
+    description=description,
+    examples=[]
+)
+
+if __name__ == "__main__":
+    demo.launch()
+EOL
+          
+          # Create README.md for the Space
+          cat > hf_space/README.md << 'EOL'
+# Audio Gender and Age Classifier
+
+This Space hosts a machine learning model that classifies audio recordings based on the speaker's gender and age.
+
+## Categories
+
+The model can classify audio into four categories:
+- Male in their twenties
+- Female in their twenties
+- Male in their fifties
+- Female in their fifties
+
+## How to Use
+
+1. Upload an MP3 file containing a voice recording
+2. The model will analyze the audio and predict the speaker's gender and age category
+3. Results will be displayed instantly
+
+## Technical Details
+
+This model uses a combination of acoustic feature extraction (MFCCs, spectral features, pitch, etc.) 
+and machine learning to classify the speaker's voice. The pipeline includes:
+
+1. Audio feature extraction using Librosa
+2. Feature processing and normalization
+3. Classification using a pre-trained model
+
+## Limitations
+
+- Best results are achieved with clear voice recordings with minimal background noise
+- The model was trained on specific voice datasets and may not generalize to all accents or languages
+- Audio recordings should be in MP3 format
+EOL
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}  # Your Hugging Face username
+          HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}  # Your Space name
+        run: |
+          cd hf_space
+          
+          # Initialize git
+          git init
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions"
+          
+          # Track LFS files
+          git lfs track "*.pkl"
+          
+          # Add all files
+          git add .
+          git commit -m "Update Space from GitHub Actions"
+          
+          # Push to Hugging Face
+          echo "Pushing to Hugging Face Space: $HF_USERNAME/$HF_SPACE_NAME"
+          git remote add space https://huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
+          git push --force https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME main
