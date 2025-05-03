@@ -1,0 +1,9 @@
+{
+  "Feature extraction": 14.413989543914795,
+  "Loading model": 1.611421823501587,
+  "Merging batch files": 0.004618167877197266,
+  "Loading features CSV": 0.0010311603546142578,
+  "Making predictions": 0.018632888793945312,
+  "Saving results": 0.00018358230590820312,
+  "Total execution time": 16.050556659698486
+}

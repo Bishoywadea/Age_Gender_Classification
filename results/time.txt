@@ -1,0 +1,15 @@
+Inference started at: 2025-05-02 19:10:42
+Inference completed at: 2025-05-02 19:11:00
+Total execution time: 00:00:17.75 (HH:MM:SS.ms)
+Total seconds: 17.75
+
+--- Stage-by-Stage Timing ---
+Feature extraction: 00:00:14.41 (14.41 seconds) - 81.2% of total time
+Loading model: 00:00:1.61 (1.61 seconds) - 9.1% of total time
+Merging batch files: 00:00:0.00 (0.00 seconds) - 0.0% of total time
+Loading features CSV: 00:00:0.00 (0.00 seconds) - 0.0% of total time
+Making predictions: 00:00:0.02 (0.02 seconds) - 0.1% of total time
+Saving results: 00:00:0.00 (0.00 seconds) - 0.0% of total time
+Total execution time: 00:00:16.05 (16.05 seconds) - 90.4% of total time
+
+Exit code: 0
